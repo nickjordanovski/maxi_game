@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maximilian — Flappy Challenge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        :root {
+            --max-navy: #091540;
+            --max-navy-mid: #122060;
+            --max-navy-light: #1e3a9c;
+            --max-gold: #d4a020;
+            --max-gold-bright: #f5c842;
+            --max-white: #f0f4ff;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Poppins', Arial, sans-serif;
+            background: radial-gradient(ellipse at 50% 0%, #1a3a8c 0%, #091540 55%, #040a1e 100%);
+        }
+
+        .game-wrap {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        canvas {
+            display: block;
+            width: min(100vw, 520px);
+            height: min(100vh, 820px);
+            max-width: 100vw;
+            max-height: 100vh;
+            border-radius: 20px;
+            box-shadow:
+                0 0 0 1px rgba(212, 160, 32, 0.25),
+                0 0 40px rgba(212, 160, 32, 0.15),
+                0 24px 64px rgba(4, 10, 30, 0.8);
+            background: #122060;
+        }
+
+        .hud {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: 16px;
+        }
+
+        .pill {
+            background: rgba(9, 21, 64, 0.88);
+            color: var(--max-gold-bright);
+            padding: 9px 18px;
+            border-radius: 999px;
+            font-family: 'Poppins', Arial, sans-serif;
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: 0.02em;
+            border: 1px solid rgba(212, 160, 32, 0.32);
+            box-shadow: 0 4px 16px rgba(4, 10, 30, 0.4);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(9, 21, 64, 0.92);
+            color: #c8d8f0;
+            padding: 10px 16px;
+            border-radius: 14px;
+            font-family: 'Poppins', Arial, sans-serif;
+            font-size: 11.5px;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            border: 1px solid rgba(212, 160, 32, 0.22);
+            box-shadow: 0 8px 24px rgba(4, 10, 30, 0.5);
+            pointer-events: none;
+            text-align: center;
+            max-width: calc(100vw - 24px);
+            line-height: 1.5;
+        }
+
+        .controls .april-1 {
+            display: block;
+            margin-top: 7px;
+            padding-top: 7px;
+            border-top: 1px solid rgba(212, 160, 32, 0.2);
+            font-size: 11px;
+            font-weight: 700;
+            color: #f4845f;
+            letter-spacing: 0.03em;
+        }
+
+        .brand {
+            position: absolute;
+            pointer-events: none;
+            left: calc((100vw - min(100vw, 520px)) / 2 + 12px);
+            bottom: 68px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 5px;
+            max-width: min(200px, calc(min(100vw, 520px) - 24px));
+            z-index: 2;
+        }
+
+        @media (max-width: 540px) {
+            .brand { bottom: 74px; max-width: min(160px, 42vw); }
+        }
+
+        .brand-logo {
+            height: 36px;
+            width: auto;
+            max-width: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 10px rgba(212,160,32,0.35));
+        }
+
+        .brand-caption {
+            font-family: 'Poppins', Arial, sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            color: rgba(245, 200, 66, 0.82);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="game-wrap">
+        <canvas id="game" width="520" height="820" style="background:#091540"></canvas>
+        <div class="hud">
+            <div class="pill">Space · Click · Tap to flap</div>
+        </div>
+        <div class="controls">
+            Pace increases every 5 pts · Boss from 5 · Thunder at 12 · Rain at 15 · R = restart
+            &nbsp;·&nbsp; Cyan = shield · Gold star = +2 pts · Bolt = escape boss
+            <span class="april-1">🎉 April 1st — nothing here is serious. Keep learning anyway.</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        const maxLogo = new Image();
+        maxLogo.crossOrigin = 'anonymous';
+        maxLogo.src = 'https://maximilian.edu.mk/wp-content/uploads/2023/01/logo-web.png';
+
+        let audioCtx = null;
+        function ensureAudio() {
+            if (!audioCtx) {
+                const Ctx = window.AudioContext || window.webkitAudioContext;
+                if (Ctx) audioCtx = new Ctx();
+            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function playTone(freq, duration, type = 'sine', volume = 0.03, slideTo = null) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, now);
+            if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), now + duration);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + duration + 0.03);
+        }
+        function playFlapSound() { playTone(620, 0.08, 'square', 0.025, 420); }
+        function playScoreSound() {
+            playTone(880, 0.07, 'triangle', 0.028);
+            setTimeout(() => { if (audioCtx) playTone(1175, 0.09, 'triangle', 0.026); }, 55);
+        }
+        function playHitSound() { playTone(220, 0.18, 'sawtooth', 0.04, 90); }
+        function playSadSound() {
+            playTone(300, 0.18, 'sine', 0.028, 190);
+            setTimeout(() => { if (audioCtx) playTone(180, 0.3, 'sine', 0.022); }, 110);
+        }
+        function playStartSound() {
+            playTone(523.25, 0.05, 'triangle', 0.02);
+            setTimeout(() => { if (audioCtx) playTone(659.25, 0.06, 'triangle', 0.02); }, 45);
+        }
+        function playRestartSound() {
+            playTone(392, 0.05, 'triangle', 0.02);
+            setTimeout(() => { if (audioCtx) playTone(523.25, 0.07, 'triangle', 0.02); }, 45);
+        }
+        function playPickupShieldSound() {
+            playTone(880, 0.06, 'triangle', 0.022);
+            setTimeout(() => { if (audioCtx) playTone(1320, 0.08, 'triangle', 0.018); }, 50);
+        }
+        function playPickupPointsSound() {
+            playTone(1047, 0.05, 'triangle', 0.022);
+            setTimeout(() => { if (audioCtx) playTone(1319, 0.05, 'triangle', 0.022); }, 40);
+            setTimeout(() => { if (audioCtx) playTone(1568, 0.08, 'triangle', 0.02); }, 80);
+        }
+        function playPickupSpeedSound() {
+            playTone(440, 0.04, 'sawtooth', 0.016, 880);
+            setTimeout(() => { if (audioCtx) playTone(880, 0.06, 'sawtooth', 0.014, 1760); }, 45);
+        }
+        function playShieldBreakSound() {
+            playTone(200, 0.12, 'sawtooth', 0.032, 80);
+            setTimeout(() => { if (audioCtx) playTone(120, 0.18, 'square', 0.018); }, 60);
+        }
+        function playNearMissSound() {
+            playTone(180, 0.09, 'sawtooth', 0.012, 120);
+        }
+
+        let bossAmbienceNodes = null;
+        function stopBossAmbience() {
+            if (!bossAmbienceNodes) return;
+            if (!audioCtx) {
+                bossAmbienceNodes = null;
+                return;
+            }
+            const now = audioCtx.currentTime;
+            try {
+                bossAmbienceNodes.master.gain.cancelScheduledValues(now);
+                bossAmbienceNodes.master.gain.setValueAtTime(bossAmbienceNodes.master.gain.value, now);
+                bossAmbienceNodes.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+            } catch (e) { /* ignore */ }
+            setTimeout(() => {
+                if (!bossAmbienceNodes) return;
+                bossAmbienceNodes.oscs.forEach(o => { try { o.stop(); o.disconnect(); } catch (e) { /* ignore */ } });
+                try {
+                    bossAmbienceNodes.master.disconnect();
+                } catch (e) { /* ignore */ }
+                bossAmbienceNodes = null;
+            }, 400);
+        }
+
+        function playBossTensionSting() {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            const master = audioCtx.createGain();
+            master.connect(audioCtx.destination);
+            master.gain.setValueAtTime(0.0001, now);
+            master.gain.exponentialRampToValueAtTime(0.42, now + 0.1);
+            master.gain.exponentialRampToValueAtTime(0.28, now + 0.55);
+            master.gain.exponentialRampToValueAtTime(0.0001, now + 2.85);
+
+            function note(oscType, freq, vol, tStart, tEnd, slideTo = null) {
+                const o = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                o.type = oscType;
+                o.frequency.setValueAtTime(freq, now + tStart);
+                if (slideTo != null) {
+                    o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), now + tEnd);
+                }
+                g.gain.setValueAtTime(0.0001, now + tStart);
+                g.gain.exponentialRampToValueAtTime(vol, now + tStart + 0.04);
+                g.gain.exponentialRampToValueAtTime(0.0001, now + tEnd);
+                o.connect(g);
+                g.connect(master);
+                o.start(now + tStart);
+                o.stop(now + tEnd + 0.02);
+            }
+
+            note('sawtooth', 58, 0.055, 0, 2.7, 44);
+            note('triangle', 116, 0.022, 0, 1.4, 87);
+            note('sawtooth', 73, 0.038, 0.12, 0.95, 49);
+            note('square', 98, 0.014, 0.38, 1.15, 62);
+            note('triangle', 147, 0.018, 0.62, 1.55, 110);
+            note('sawtooth', 55, 0.032, 0.88, 2.2, 41);
+        }
+
+        function startBossAmbience() {
+            if (!audioCtx || bossAmbienceNodes) return;
+            const now = audioCtx.currentTime;
+            const master = audioCtx.createGain();
+            master.gain.setValueAtTime(0.0001, now);
+            master.gain.exponentialRampToValueAtTime(0.055, now + 0.9);
+            master.connect(audioCtx.destination);
+            const oscs = [];
+            const pairs = [
+                { type: 'sawtooth', f: 49, v: 0.028 },
+                { type: 'triangle', f: 73.5, v: 0.014 },
+                { type: 'sine', f: 98, v: 0.008 },
+            ];
+            pairs.forEach(({ type, f, v }) => {
+                const o = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                o.type = type;
+                o.frequency.setValueAtTime(f, now);
+                g.gain.value = v;
+                o.connect(g);
+                g.connect(master);
+                o.start(now);
+                oscs.push(o);
+            });
+            bossAmbienceNodes = { master, oscs };
+        }
+
+        const state = {
+            width: canvas.width,
+            height: canvas.height,
+            started: false,
+            gameOver: false,
+            score: 0,
+            best: Number(localStorage.getItem('flappy_best') || 0),
+            gravity: 0.42,
+            flapPower: -7.2,
+            frame: 0,
+            hitPlayed: false,
+            deathByBoss: false,
+            baseSpeed: 2.9,
+            speedStep: 0.32,
+            currentSpeed: 2.9,
+            pipeSpawnFrames: 92,
+            pipeSpawnAcc: 0,
+            bird: { x: 140, y: 320, vy: 0, r: 18, tilt: 0 },
+            ground: { y: 740, h: 80, offset: 0 },
+            pipeGap: 180,
+            pipeWidth: 82,
+            pipes: [],
+            bossActive: false,
+            bossIntroPlayed: false,
+            boss: { x: -160, y: 320, speedBase: 1.1 },
+            hasShield: false,
+            bossEscapeT: 0,
+            bossPanicLeft: 0,
+            clouds: [
+                { x: 50, y: 110, w: 88, h: 34, s: 0.35 },
+                { x: 240, y: 180, w: 120, h: 42, s: 0.22 },
+                { x: 390, y: 100, w: 92, h: 30, s: 0.28 },
+            ],
+        };
+
+        function difficultyLevel() {
+            return Math.floor(state.score / 5);
+        }
+
+        function syncDifficulty() {
+            const level = difficultyLevel();
+            state.currentSpeed = state.baseSpeed + level * state.speedStep;
+            state.pipeSpawnFrames = Math.max(70, 92 - level * 4);
+            state.bossActive = state.score >= 5;
+        }
+
+        function resetGame() {
+            state.started = false;
+            state.gameOver = false;
+            state.score = 0;
+            state.frame = 0;
+            state.hitPlayed = false;
+            state.deathByBoss = false;
+            state.bossIntroPlayed = false;
+            state.bird.y = 320;
+            state.bird.vy = 0;
+            state.bird.tilt = 0;
+            state.ground.offset = 0;
+            state.pipeSpawnAcc = 0;
+            state.pipes = [];
+            state.boss.x = -160;
+            state.boss.y = 320;
+            state.hasShield = false;
+            state.bossEscapeT = 0;
+            state.bossPanicLeft = 0;
+            stopBossAmbience();
+            syncDifficulty();
+            lastFrameTime = 0;
+        }
+
+        function setGameOver(byBoss = false) {
+            if (state.gameOver) return;
+            state.gameOver = true;
+            stopBossAmbience();
+            state.deathByBoss = byBoss;
+            if (!state.hitPlayed) {
+                state.hitPlayed = true;
+                if (byBoss) playSadSound(); else playHitSound();
+            }
+        }
+
+        function flap() {
+            ensureAudio();
+            if (state.gameOver) return;
+            if (!state.started) playStartSound();
+            state.started = true;
+            state.bird.vy = state.flapPower;
+            playFlapSound();
+        }
+
+        const ITEM_TYPES = ['shield', 'points', 'speed'];
+        const ITEM_SPAWN_CHANCE = 0.28;
+        const ITEM_R = 14;
+
+        function createPipe() {
+            const topMin = 80;
+            const topMax = state.ground.y - state.pipeGap - 120;
+            const top = Math.floor(Math.random() * (topMax - topMin + 1)) + topMin;
+            let item = null;
+            if (Math.random() < ITEM_SPAWN_CHANCE) {
+                const type = ITEM_TYPES[Math.floor(Math.random() * ITEM_TYPES.length)];
+                // oy is vertical offset from gap center (safe within ±(pipeGap/2 - ITEM_R - 8))
+                const maxOy = state.pipeGap / 2 - ITEM_R - 8;
+                const oy = (Math.random() * 2 - 1) * maxOy;
+                item = { type, oy, collected: false };
+            }
+            state.pipes.push({ x: state.width + 40, top, scored: false, nearMissTriggered: false, item });
+        }
+
+        function circleRectCollision(cx, cy, cr, rx, ry, rw, rh) {
+            const nx = Math.max(rx, Math.min(cx, rx + rw));
+            const ny = Math.max(ry, Math.min(cy, ry + rh));
+            const dx = cx - nx;
+            const dy = cy - ny;
+            return dx * dx + dy * dy < cr * cr;
+        }
+
+        function updateBoss(dt) {
+            if (!state.bossActive || state.gameOver) return;
+            const level = difficultyLevel();
+            const desiredX = state.bird.x - 110 + Math.min(35, level * 4);
+
+            // Boss panic: activated by near-misses, decays with pipe clears
+            const panicMul = state.bossPanicLeft > 0 ? 1.68 : 1;
+            // Escape boost: activated by speed pickup — slows boss down significantly
+            const escapeMul = state.bossEscapeT > 0 ? 0.38 : 1;
+            if (state.bossEscapeT > 0) state.bossEscapeT = Math.max(0, state.bossEscapeT - dt);
+
+            if (state.boss.x < desiredX) {
+                state.boss.x += (state.boss.speedBase + level * 0.05) * panicMul * escapeMul * dt;
+                if (state.boss.x > desiredX) state.boss.x = desiredX;
+            }
+            const yTrack = state.bossEscapeT > 0 ? 0.03 : 0.045;
+            const yDelta = state.bird.y - state.boss.y;
+            state.boss.y += yDelta * yTrack * dt;
+
+            const dx = state.bird.x - state.boss.x;
+            const dy = state.bird.y - state.boss.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 38) setGameOver(true);
+        }
+
+        function update(dt) {
+            state.frame += dt;
+
+            state.clouds.forEach(cloud => {
+                cloud.x -= cloud.s * dt;
+                if (cloud.x + cloud.w < 0) cloud.x = state.width + 20;
+            });
+
+            if (!state.started || state.gameOver) return;
+
+            state.bird.vy += state.gravity * dt;
+            state.bird.y += state.bird.vy * dt;
+            state.bird.tilt = Math.max(-0.6, Math.min(1.15, state.bird.vy / 10));
+            state.ground.offset = (state.ground.offset + state.currentSpeed * dt) % 32;
+
+            state.pipeSpawnAcc += dt;
+            while (state.pipeSpawnAcc >= state.pipeSpawnFrames) {
+                state.pipeSpawnAcc -= state.pipeSpawnFrames;
+                createPipe();
+            }
+
+            for (const pipe of state.pipes) {
+                pipe.x -= state.currentSpeed * dt;
+
+                if (!pipe.scored && pipe.x + state.pipeWidth < state.bird.x) {
+                    pipe.scored = true;
+                    state.score += 1;
+                    playScoreSound();
+                    if (state.score > state.best) {
+                        state.best = state.score;
+                        localStorage.setItem('flappy_best', String(state.best));
+                    }
+                    syncDifficulty();
+                    // Decay boss panic by 1 on each pipe clear (only pipe gates count)
+                    if (state.bossPanicLeft > 0) state.bossPanicLeft--;
+                    if (state.bossActive && !state.bossIntroPlayed) {
+                        state.bossIntroPlayed = true;
+                        ensureAudio();
+                        playBossTensionSting();
+                        setTimeout(() => {
+                            if (!state.gameOver && state.bossActive && audioCtx) startBossAmbience();
+                        }, 2650);
+                    }
+                }
+
+                // Item pickup (circle–circle on gap center + oy offset)
+                if (pipe.item && !pipe.item.collected) {
+                    const gapCenterY = pipe.top + state.pipeGap / 2 + pipe.item.oy;
+                    const idx = pipe.x + state.pipeWidth / 2;
+                    const dx = state.bird.x - idx;
+                    const dy = state.bird.y - gapCenterY;
+                    if (dx * dx + dy * dy < (ITEM_R + state.bird.r) * (ITEM_R + state.bird.r)) {
+                        pipe.item.collected = true;
+                        ensureAudio();
+                        if (pipe.item.type === 'shield') {
+                            state.hasShield = true;
+                            playPickupShieldSound();
+                        } else if (pipe.item.type === 'points') {
+                            state.score += 2;
+                            if (state.score > state.best) {
+                                state.best = state.score;
+                                localStorage.setItem('flappy_best', String(state.best));
+                            }
+                            syncDifficulty();
+                            playPickupPointsSound();
+                        } else if (pipe.item.type === 'speed') {
+                            state.bossEscapeT = 5 * 60; // 5 seconds in dt-frame units (dt≈1 @60fps)
+                            playPickupSpeedSound();
+                        }
+                    }
+                }
+
+                const hitTop = circleRectCollision(state.bird.x, state.bird.y, state.bird.r, pipe.x, 0, state.pipeWidth, pipe.top);
+                const bottomY = pipe.top + state.pipeGap;
+                const hitBottom = circleRectCollision(
+                    state.bird.x,
+                    state.bird.y,
+                    state.bird.r,
+                    pipe.x,
+                    bottomY,
+                    state.pipeWidth,
+                    state.height - state.ground.h - bottomY
+                );
+                if (hitTop || hitBottom) {
+                    if (state.hasShield) {
+                        state.hasShield = false;
+                        // Push bird clear of the pipe so the next frame doesn't re-trigger
+                        if (hitTop) {
+                            state.bird.y = pipe.top + state.bird.r + 2;
+                            state.bird.vy = Math.abs(state.bird.vy) * 0.4;
+                        } else {
+                            state.bird.y = bottomY - state.bird.r - 2;
+                            state.bird.vy = -Math.abs(state.bird.vy) * 0.4;
+                        }
+                        ensureAudio();
+                        playShieldBreakSound();
+                    } else {
+                        setGameOver(false);
+                    }
+                }
+
+                // Near-miss: bird threading through gap very close to edge, triggers boss panic
+                if (state.bossActive && !pipe.nearMissTriggered) {
+                    const birdOverlapPipe = (state.bird.x + state.bird.r > pipe.x) &&
+                                            (state.bird.x - state.bird.r < pipe.x + state.pipeWidth);
+                    if (birdOverlapPipe && !hitTop && !hitBottom) {
+                        const distToTop = Math.abs(state.bird.y - pipe.top);
+                        const distToBottom = Math.abs(state.bird.y - bottomY);
+                        const nearMissThresh = 20;
+                        if (distToTop < nearMissThresh || distToBottom < nearMissThresh) {
+                            pipe.nearMissTriggered = true;
+                            state.bossPanicLeft = 2 + Math.floor(Math.random() * 2);
+                            ensureAudio();
+                            playNearMissSound();
+                        }
+                    }
+                }
+            }
+
+            state.pipes = state.pipes.filter(pipe => pipe.x + state.pipeWidth > -50);
+
+            if (state.bird.y + state.bird.r >= state.ground.y) {
+                state.bird.y = state.ground.y - state.bird.r;
+                setGameOver(false);
+            }
+            if (state.bird.y - state.bird.r <= 0) {
+                state.bird.y = state.bird.r;
+                state.bird.vy = 0;
+            }
+
+            updateBoss(dt);
+        }
+
+        function drawCloud(x, y, w, h, dark = 0) {
+            const alpha = Math.max(0.06, 0.18 - dark * 0.03);
+            ctx.fillStyle = `rgba(160,200,255,${alpha})`;
+            ctx.beginPath();
+            ctx.arc(x + w * 0.25, y + h * 0.58, h * 0.34, 0, Math.PI * 2);
+            ctx.arc(x + w * 0.48, y + h * 0.45, h * 0.42, 0, Math.PI * 2);
+            ctx.arc(x + w * 0.7, y + h * 0.58, h * 0.3, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawBackground() {
+            const level = difficultyLevel();
+            const storm = Math.min(4, level);
+            const gradient = ctx.createLinearGradient(0, 0, 0, state.height);
+            // Maximilian navy-blue palette — brightens to brand blue at ground
+            if (storm === 0) {
+                gradient.addColorStop(0, '#0d2461');
+                gradient.addColorStop(0.55, '#1e4a9e');
+                gradient.addColorStop(1, '#4888d8');
+            } else if (storm === 1) {
+                gradient.addColorStop(0, '#091840');
+                gradient.addColorStop(0.55, '#163478');
+                gradient.addColorStop(1, '#2e5cb0');
+            } else if (storm === 2) {
+                gradient.addColorStop(0, '#060e28');
+                gradient.addColorStop(0.55, '#0e2254');
+                gradient.addColorStop(1, '#1e3878');
+            } else if (storm === 3) {
+                gradient.addColorStop(0, '#03060f');
+                gradient.addColorStop(0.55, '#080e2a');
+                gradient.addColorStop(1, '#111e44');
+            } else {
+                gradient.addColorStop(0, '#010205');
+                gradient.addColorStop(0.65, '#040810');
+                gradient.addColorStop(1, '#080e20');
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, state.width, state.height);
+
+            // Distant stars (visible at all levels, fade with storm)
+            const starAlpha = Math.max(0.04, 0.25 - storm * 0.04);
+            ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
+            const starSeed = [31, 67, 113, 179, 241, 307, 373, 431, 503, 557, 619, 683];
+            for (let i = 0; i < starSeed.length; i++) {
+                const sx = (starSeed[i] * 37 + i * 83) % state.width;
+                const sy = (starSeed[i] * 19 + i * 61) % (state.ground.y * 0.65);
+                const sr = 0.8 + (i % 3) * 0.5;
+                ctx.beginPath();
+                ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            // Gold accent haze near horizon (Maximilian gold warmth)
+            const hazeGrad = ctx.createLinearGradient(0, state.ground.y - 120, 0, state.ground.y);
+            hazeGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            hazeGrad.addColorStop(1, `rgba(180, 130, 10, ${0.12 - storm * 0.01})`);
+            ctx.fillStyle = hazeGrad;
+            ctx.fillRect(0, state.ground.y - 120, state.width, 120);
+
+            state.clouds.forEach(c => drawCloud(c.x, c.y, c.w + storm * 18, c.h + storm * 6, storm));
+
+            if (state.score >= 12) {
+                const flash = ((state.frame + 20) % 170 < 4) || ((state.frame + 95) % 240 < 3);
+                if (flash) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                    ctx.fillRect(0, 0, state.width, state.height);
+                }
+                ctx.strokeStyle = 'rgba(255,255,210,0.95)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(state.width * 0.72, 30);
+                ctx.lineTo(state.width * 0.67, 110);
+                ctx.lineTo(state.width * 0.74, 110);
+                ctx.lineTo(state.width * 0.63, 220);
+                ctx.lineTo(state.width * 0.7, 150);
+                ctx.lineTo(state.width * 0.64, 150);
+                ctx.stroke();
+            }
+
+            if (state.score >= 15) {
+                ctx.strokeStyle = 'rgba(190,220,255,0.42)';
+                ctx.lineWidth = 2;
+                const rainOffset = (state.frame * (6 + storm)) % 28;
+                for (let x = -40; x < state.width + 40; x += 22) {
+                    for (let y = -40; y < state.ground.y; y += 95) {
+                        const rx = x + ((y / 95) % 2) * 8;
+                        const ry = y + rainOffset;
+                        ctx.beginPath();
+                        ctx.moveTo(rx, ry);
+                        ctx.lineTo(rx - 8, ry + 18);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function drawPipe(x, y, w, h, upsideDown = false) {
+            ctx.save();
+            if (upsideDown) {
+                ctx.translate(x + w / 2, y + h / 2);
+                ctx.scale(1, -1);
+                ctx.translate(-(x + w / 2), -(y + h / 2));
+            }
+            // Maximilian navy body
+            const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+            grad.addColorStop(0, '#0e2461');
+            grad.addColorStop(0.35, '#1e3a8c');
+            grad.addColorStop(0.7, '#162e74');
+            grad.addColorStop(1, '#091840');
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y, w, h);
+            // Highlight edge
+            ctx.fillStyle = 'rgba(80,130,220,0.28)';
+            ctx.fillRect(x + 8, y, 7, h);
+            // Shadow edge
+            ctx.fillStyle = 'rgba(0,0,0,0.32)';
+            ctx.fillRect(x + w - 9, y, 9, h);
+            // Gold crown cap
+            const capGrad = ctx.createLinearGradient(x - 6, 0, x + w + 6, 0);
+            capGrad.addColorStop(0, '#a07010');
+            capGrad.addColorStop(0.4, '#e6b020');
+            capGrad.addColorStop(0.6, '#f5c842');
+            capGrad.addColorStop(1, '#b08818');
+            ctx.fillStyle = capGrad;
+            ctx.fillRect(x - 7, y + h - 22, w + 14, 22);
+            // Cap highlight
+            ctx.fillStyle = 'rgba(255,240,180,0.22)';
+            ctx.fillRect(x - 4, y + h - 22, w + 8, 6);
+            // Subtle outline
+            ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x, y, w, h);
+            ctx.strokeStyle = 'rgba(180,130,10,0.5)';
+            ctx.strokeRect(x - 7, y + h - 22, w + 14, 22);
+            ctx.restore();
+        }
+
+        function drawBird() {
+            const { x, y, r, tilt } = state.bird;
+            const bob = !state.started && !state.gameOver ? Math.sin(state.frame / 12) * 6 : 0;
+            const by = y + bob;
+            ctx.save();
+            ctx.translate(x, by);
+            ctx.rotate(tilt);
+
+            ctx.fillStyle = '#d62828';
+            ctx.beginPath();
+            ctx.arc(0, 0, r + 1, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#b71c1c';
+            ctx.beginPath();
+            ctx.arc(-5, -4, r * 0.72, Math.PI * 0.9, Math.PI * 1.9);
+            ctx.fill();
+
+            ctx.fillStyle = '#f5f5f5';
+            ctx.beginPath();
+            ctx.arc(0, 9, r * 0.7, 0.1, Math.PI - 0.1);
+            ctx.lineTo(-r * 0.7, 9);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(4, -4, 8, 0, Math.PI * 2);
+            ctx.arc(-8, -4, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#1f1f1f';
+            ctx.beginPath();
+            ctx.arc(6, -3, 3, 0, Math.PI * 2);
+            ctx.arc(-6, -3, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#3a0a0a';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-16, -10);
+            ctx.lineTo(-2, -14);
+            ctx.moveTo(2, -14);
+            ctx.lineTo(16, -10);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ff9f1c';
+            ctx.beginPath();
+            ctx.moveTo(r - 2, 1);
+            ctx.lineTo(r + 18, 7);
+            ctx.lineTo(r - 2, 13);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#8d0801';
+            ctx.beginPath();
+            ctx.moveTo(-8, -18);
+            ctx.lineTo(0, -26);
+            ctx.lineTo(7, -17);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#6a040f';
+            ctx.beginPath();
+            ctx.moveTo(-r + 4, -4);
+            ctx.quadraticCurveTo(-r - 10, -10, -r - 4, 6);
+            ctx.quadraticCurveTo(-r + 1, 2, -r + 4, -4);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawBoss() {
+            if (!state.bossActive) return;
+            const x = state.boss.x;
+            const y = state.boss.y;
+            const bob = Math.sin(state.frame * 0.085) * 2.2;
+            const bladePulse = 0.65 + Math.sin(state.frame * 0.25) * 0.12;
+
+            ctx.save();
+            ctx.translate(x, y + bob);
+
+            // Cape (billow behind — dark lord silhouette)
+            ctx.fillStyle = '#120508';
+            ctx.beginPath();
+            ctx.moveTo(-6, 6);
+            ctx.quadraticCurveTo(-32, 18, -42, 52);
+            ctx.lineTo(-26, 50);
+            ctx.quadraticCurveTo(-16, 26, -4, 14);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#250a12';
+            ctx.beginPath();
+            ctx.moveTo(-2, 8);
+            ctx.quadraticCurveTo(-24, 28, -36, 56);
+            ctx.lineTo(-20, 54);
+            ctx.quadraticCurveTo(-12, 34, 0, 18);
+            ctx.closePath();
+            ctx.fill();
+
+            // Angry Birds–style round body (charcoal / space black)
+            const bodyCy = 5;
+            const bodyR = 21;
+            const bodyGrad = ctx.createRadialGradient(-7, bodyCy - 10, 4, 0, bodyCy, bodyR);
+            bodyGrad.addColorStop(0, '#5c5c68');
+            bodyGrad.addColorStop(0.45, '#25252d');
+            bodyGrad.addColorStop(1, '#08080c');
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath();
+            ctx.arc(0, bodyCy, bodyR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Tiny puffed wing hint (Angry Birds puff)
+            ctx.fillStyle = '#16161c';
+            ctx.beginPath();
+            ctx.ellipse(-18, 10, 9, 7, -0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Vader-style helmet dome
+            ctx.fillStyle = '#0e0e14';
+            ctx.beginPath();
+            ctx.moveTo(-16, -2);
+            ctx.bezierCurveTo(-18, -28, 18, -28, 16, -2);
+            ctx.lineTo(12, 4);
+            ctx.lineTo(-12, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(90, 98, 118, 0.55)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, -16, 11, Math.PI * 1.12, Math.PI * 1.88);
+            ctx.stroke();
+
+            // Helmet brow ridge
+            ctx.fillStyle = '#06060a';
+            ctx.beginPath();
+            ctx.moveTo(-15, -4);
+            ctx.quadraticCurveTo(0, -12, 15, -4);
+            ctx.lineTo(14, 2);
+            ctx.quadraticCurveTo(0, -4, -14, 2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Face mask panel
+            ctx.fillStyle = '#1a1a22';
+            ctx.beginPath();
+            ctx.moveTo(-13, 0);
+            ctx.quadraticCurveTo(-14, 14, -8, 20);
+            ctx.lineTo(8, 20);
+            ctx.quadraticCurveTo(14, 14, 13, 0);
+            ctx.quadraticCurveTo(0, 4, -13, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Silver grill (mouth triangle lines — mask detail)
+            ctx.strokeStyle = '#8a9099';
+            ctx.lineWidth = 1.6;
+            for (let i = 0; i < 5; i++) {
+                const ty = 6 + i * 3.2;
+                ctx.beginPath();
+                ctx.moveTo(-9, ty);
+                ctx.lineTo(9, ty);
+                ctx.stroke();
+            }
+            ctx.strokeStyle = '#5a6068';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 4);
+            ctx.lineTo(0, 22);
+            ctx.stroke();
+
+            // Glowing Sith eyes (Angry Birds big-eye style, red)
+            const eyeGlow = ctx.createRadialGradient(-7, -2, 0, -7, -2, 9);
+            eyeGlow.addColorStop(0, `rgba(255, 60, 40, ${0.45 + bladePulse * 0.25})`);
+            eyeGlow.addColorStop(0.5, 'rgba(180, 20, 10, 0.35)');
+            eyeGlow.addColorStop(1, 'rgba(80, 0, 0, 0)');
+            ctx.fillStyle = eyeGlow;
+            ctx.beginPath();
+            ctx.ellipse(-7, -2, 8, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+            const eyeGlow2 = ctx.createRadialGradient(7, -2, 0, 7, -2, 9);
+            eyeGlow2.addColorStop(0, `rgba(255, 60, 40, ${0.45 + bladePulse * 0.25})`);
+            eyeGlow2.addColorStop(0.5, 'rgba(180, 20, 10, 0.35)');
+            eyeGlow2.addColorStop(1, 'rgba(80, 0, 0, 0)');
+            ctx.fillStyle = eyeGlow2;
+            ctx.beginPath();
+            ctx.ellipse(7, -2, 8, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#f0f2f5';
+            ctx.beginPath();
+            ctx.ellipse(-7, -2, 5.5, 6.2, 0, 0, Math.PI * 2);
+            ctx.ellipse(7, -2, 5.5, 6.2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#c41e12';
+            ctx.beginPath();
+            ctx.ellipse(-7, -1.5, 3, 3.5, 0, 0, Math.PI * 2);
+            ctx.ellipse(7, -1.5, 3, 3.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ff6b5a';
+            ctx.beginPath();
+            ctx.arc(-8, -3, 1.2, 0, Math.PI * 2);
+            ctx.arc(6, -3, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Lightsaber hilt
+            ctx.fillStyle = '#2a2a30';
+            ctx.fillRect(16, 0, 5, 14);
+            ctx.fillStyle = '#1a1a1e';
+            ctx.fillRect(15, -2, 7, 4);
+            ctx.fillStyle = '#c9ccd4';
+            ctx.fillRect(17, 12, 3, 3);
+
+            // Red blade (glow + core)
+            const bx = 21;
+            const by = 7;
+            ctx.strokeStyle = `rgba(255, 40, 30, ${0.35 * bladePulse})`;
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(52, by);
+            ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 120, 100, ${0.5 * bladePulse})`;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(50, by);
+            ctx.stroke();
+            ctx.strokeStyle = '#fff5f0';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(48, by);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawGround() {
+            // Sandy base
+            ctx.fillStyle = '#6e4c10';
+            ctx.fillRect(0, state.ground.y, state.width, state.ground.h);
+            // Alternating tiles
+            for (let i = -1; i < Math.ceil(state.width / 32) + 2; i++) {
+                const tx = i * 32 - state.ground.offset;
+                ctx.fillStyle = i % 2 === 0 ? '#5a3e0c' : '#4e3408';
+                ctx.fillRect(tx, state.ground.y + 20, 32, state.ground.h - 20);
+                // Tile grout lines
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.fillRect(tx, state.ground.y + 20, 1, state.ground.h - 20);
+            }
+            // Rich grass stripe
+            ctx.fillStyle = '#1e6e10';
+            ctx.fillRect(0, state.ground.y - 16, state.width, 18);
+            // Gold trim line — Maximilian signature
+            ctx.fillStyle = '#d4a020';
+            ctx.fillRect(0, state.ground.y - 18, state.width, 3);
+            // Grass top highlight
+            ctx.fillStyle = 'rgba(80,200,40,0.22)';
+            ctx.fillRect(0, state.ground.y - 16, state.width, 5);
+        }
+
+        function roundRect(x, y, w, h, r, fill = false) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            if (fill) ctx.fill();
+        }
+
+        function drawItem(pipe) {
+            if (!pipe.item || pipe.item.collected) return;
+            const ix = pipe.x + state.pipeWidth / 2;
+            const iy = pipe.top + state.pipeGap / 2 + pipe.item.oy;
+            const r = ITEM_R;
+            const t = state.frame;
+            const bob = Math.sin(t * 0.12) * 2.5;
+            ctx.save();
+            ctx.translate(ix, iy + bob);
+
+            if (pipe.item.type === 'shield') {
+                // Cyan hexagonal shield with glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(0,240,220,0.7)';
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+                    i === 0 ? ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+                }
+                ctx.closePath();
+                const shieldGrad = ctx.createRadialGradient(0, -3, 2, 0, 0, r);
+                shieldGrad.addColorStop(0, '#aff6ee');
+                shieldGrad.addColorStop(1, '#00b8a9');
+                ctx.fillStyle = shieldGrad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                // Cross detail
+                ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, -6); ctx.lineTo(0, 6);
+                ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
+                ctx.stroke();
+
+            } else if (pipe.item.type === 'points') {
+                // Gold star +2
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(255,200,30,0.75)';
+                ctx.beginPath();
+                const spikes = 5, outer = r, inner = r * 0.45;
+                for (let i = 0; i < spikes * 2; i++) {
+                    const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+                    const rad = i % 2 === 0 ? outer : inner;
+                    i === 0 ? ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad) : ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                }
+                ctx.closePath();
+                const starGrad = ctx.createRadialGradient(0, -2, 1, 0, 0, r);
+                starGrad.addColorStop(0, '#fff176');
+                starGrad.addColorStop(1, '#f9a825');
+                ctx.fillStyle = starGrad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#7b3f00';
+                ctx.font = 'bold 9px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('+2', 0, 1);
+
+            } else if (pipe.item.type === 'speed') {
+                // Amber circle with lightning bolt
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = 'rgba(255,160,0,0.72)';
+                const circGrad = ctx.createRadialGradient(0, -3, 2, 0, 0, r);
+                circGrad.addColorStop(0, '#ffe082');
+                circGrad.addColorStop(1, '#e65100');
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.fillStyle = circGrad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+                ctx.lineWidth = 1.6;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                // Bolt shape
+                ctx.fillStyle = '#fff9c4';
+                ctx.beginPath();
+                ctx.moveTo(2, -8);
+                ctx.lineTo(-3, 1);
+                ctx.lineTo(1, 1);
+                ctx.lineTo(-2, 8);
+                ctx.lineTo(3, -1);
+                ctx.lineTo(-1, -1);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        function drawPowerups() {
+            if (!state.started || state.gameOver) return;
+            const px = 16;
+            let py = 16;
+            const iconR = 10;
+
+            ctx.save();
+            // Shield icon
+            {
+                const active = state.hasShield;
+                ctx.shadowBlur = active ? 8 : 0;
+                ctx.shadowColor = 'rgba(0,240,220,0.9)';
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+                    i === 0 ? ctx.moveTo(px + Math.cos(a) * iconR, py + Math.sin(a) * iconR)
+                            : ctx.lineTo(px + Math.cos(a) * iconR, py + Math.sin(a) * iconR);
+                }
+                ctx.closePath();
+                ctx.fillStyle = active ? '#00e5d0' : 'rgba(0,180,165,0.25)';
+                ctx.fill();
+                ctx.strokeStyle = active ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)';
+                ctx.lineWidth = 1.6;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                if (active) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py - 5); ctx.lineTo(px, py + 5);
+                    ctx.moveTo(px - 4, py); ctx.lineTo(px + 4, py);
+                    ctx.stroke();
+                }
+            }
+
+            // Speed / escape bar
+            const escMax = 5 * 60;
+            const escFrac = state.bossEscapeT > 0 ? Math.min(1, state.bossEscapeT / escMax) : 0;
+            const barW = 44;
+            const barH = 6;
+            const barX = px - iconR;
+            const barY = py + iconR + 5;
+            if (state.bossEscapeT > 0) {
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                roundRect(barX - 1, barY - 1, barW + 2, barH + 2, 3, true);
+                ctx.fillStyle = '#ffb300';
+                roundRect(barX, barY, barW * escFrac, barH, 3, true);
+            }
+
+            ctx.restore();
+        }
+
+        function drawScore() {
+            ctx.textAlign = 'center';
+            // Score number — Maximilian gold
+            ctx.font = '800 58px Poppins, Arial';
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fillText(String(state.score), state.width / 2 + 2, 86);
+            ctx.fillStyle = '#f5c842';
+            ctx.fillText(String(state.score), state.width / 2, 84);
+
+            const level = difficultyLevel();
+            if (level > 0) {
+                ctx.font = '600 15px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillText('Pace +' + level, state.width / 2 + 1, 111);
+                ctx.fillStyle = 'rgba(245,200,66,0.88)';
+                ctx.fillText('Pace +' + level, state.width / 2, 110);
+            }
+
+            if (state.score >= 15) {
+                ctx.font = '600 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillText('⚡ Rain Mode', state.width / 2 + 1, 136);
+                ctx.fillStyle = '#a8d8ff';
+                ctx.fillText('⚡ Rain Mode', state.width / 2, 135);
+            } else if (state.score >= 12) {
+                ctx.font = '600 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillText('⚡ Thunder Mode', state.width / 2 + 1, 136);
+                ctx.fillStyle = '#ffe082';
+                ctx.fillText('⚡ Thunder Mode', state.width / 2, 135);
+            }
+
+            if (state.bossActive && !state.gameOver) {
+                const panicSuffix = state.bossPanicLeft > 0 ? ' ⚡' : '';
+                ctx.font = '600 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.fillText('Dark Side Bird' + panicSuffix, state.width / 2 + 1, 160);
+                ctx.fillStyle = state.bossPanicLeft > 0 ? '#ff7070' : '#c8d8f8';
+                ctx.fillText('Dark Side Bird' + panicSuffix, state.width / 2, 159);
+            }
+        }
+
+        function drawLogo(x, y, w, alpha = 1) {
+            if (!maxLogo.complete || !maxLogo.naturalWidth) return;
+            const h = w * (maxLogo.naturalHeight / maxLogo.naturalWidth);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(maxLogo, x - w / 2, y - h / 2, w, h);
+            ctx.restore();
+        }
+
+        function drawPanels() {
+            if (!state.started && !state.gameOver) {
+                const pw = 318, ph = 252;
+                const px = state.width / 2 - pw / 2;
+                // Push panel down a bit so logo floats above it
+                const py = 210;
+
+                // Logo floats above the panel — centered, prominent
+                drawLogo(state.width / 2, py - 42, 180);
+
+                // Panel background — deep navy glass
+                ctx.fillStyle = 'rgba(6, 14, 48, 0.94)';
+                roundRect(px, py, pw, ph, 20, true);
+                // Gold top accent bar
+                ctx.fillStyle = '#d4a020';
+                roundRect(px + 20, py + 2, pw - 40, 3, 2, true);
+                // Bottom gold line
+                ctx.fillStyle = 'rgba(212, 160, 32, 0.3)';
+                roundRect(px + 20, py + ph - 5, pw - 40, 2, 2, true);
+                // Subtle border
+                ctx.strokeStyle = 'rgba(212, 160, 32, 0.2)';
+                ctx.lineWidth = 1.5;
+                roundRect(px, py, pw, ph, 20);
+                ctx.stroke();
+
+                ctx.textAlign = 'center';
+                // Subtitle
+                ctx.font = '600 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(200, 220, 255, 0.82)';
+                ctx.fillText('Flappy Challenge', state.width / 2, py + 32);
+                // Motto
+                ctx.font = '500 11px Poppins, Arial';
+                ctx.fillStyle = 'rgba(212, 160, 32, 0.7)';
+                ctx.fillText('Inclusion · Dedication · Responsibility', state.width / 2, py + 54);
+                // April 1st badge
+                ctx.font = '700 11.5px Poppins, Arial';
+                ctx.fillStyle = '#f4845f';
+                ctx.fillText('🎉 April 1st Edition', state.width / 2, py + 76);
+                // Divider
+                ctx.fillStyle = 'rgba(212, 160, 32, 0.18)';
+                ctx.fillRect(px + 30, py + 88, pw - 60, 1);
+                // Instructions
+                ctx.font = '500 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(200, 220, 255, 0.88)';
+                ctx.fillText('Space / Click / Tap  →  flap', state.width / 2, py + 118);
+                ctx.font = '500 12.5px Poppins, Arial';
+                ctx.fillStyle = 'rgba(160, 190, 240, 0.72)';
+                ctx.fillText('Dodge pipes  ·  Grab items  ·  Outrun the boss', state.width / 2, py + 145);
+                ctx.font = '500 11.5px Poppins, Arial';
+                ctx.fillStyle = 'rgba(245, 200, 66, 0.55)';
+                ctx.fillText('Cyan = shield  ·  ★ = +2 pts  ·  ⚡ = escape', state.width / 2, py + 168);
+            }
+
+            if (state.gameOver) {
+                // Dark overlay
+                ctx.fillStyle = 'rgba(4, 8, 28, 0.55)';
+                ctx.fillRect(0, 0, state.width, state.height);
+
+                const pw = 340, ph = 264;
+                const px = state.width / 2 - pw / 2;
+                const py = 196;
+                // Panel
+                ctx.fillStyle = 'rgba(6, 14, 48, 0.97)';
+                roundRect(px, py, pw, ph, 22, true);
+                ctx.strokeStyle = 'rgba(212, 160, 32, 0.28)';
+                ctx.lineWidth = 1.5;
+                roundRect(px, py, pw, ph, 22);
+                ctx.stroke();
+                // Gold top accent
+                ctx.fillStyle = '#d4a020';
+                roundRect(px + 22, py + 2, pw - 44, 3, 2, true);
+
+                ctx.textAlign = 'center';
+                const byBoss = state.deathByBoss;
+                // Headline
+                ctx.font = '700 26px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.fillText(byBoss ? 'Dark Side caught you!' : 'Unlucky!', state.width / 2 + 1, py + 52);
+                ctx.fillStyle = byBoss ? '#ff7070' : '#f5c842';
+                ctx.fillText(byBoss ? 'Dark Side caught you!' : 'Unlucky!', state.width / 2, py + 51);
+                // Motivational line
+                const quips = byBoss
+                    ? ['Every master was once defeated.', 'The force is strong — keep learning.', 'Persistence beats talent.']
+                    : ['Every expert started as a beginner.', 'Resilience is the skill.', 'The path forward is through.'];
+                ctx.font = '500 12px Poppins, Arial';
+                ctx.fillStyle = 'rgba(180, 210, 255, 0.65)';
+                ctx.fillText(quips[state.best % quips.length], state.width / 2, py + 76);
+                // Divider
+                ctx.fillStyle = 'rgba(212, 160, 32, 0.18)';
+                ctx.fillRect(px + 30, py + 90, pw - 60, 1);
+                // Scores
+                ctx.font = '700 22px Poppins, Arial';
+                ctx.fillStyle = '#c8d8f8';
+                ctx.fillText('Score', state.width / 2 - 72, py + 128);
+                ctx.fillText('Best', state.width / 2 + 72, py + 128);
+                ctx.font = '800 32px Poppins, Arial';
+                ctx.fillStyle = '#f5c842';
+                ctx.fillText(String(state.score), state.width / 2 - 72, py + 163);
+                ctx.fillStyle = state.score >= state.best ? '#f5c842' : 'rgba(245,200,66,0.55)';
+                ctx.fillText(String(state.best), state.width / 2 + 72, py + 163);
+                // Vertical separator between scores
+                ctx.fillStyle = 'rgba(212,160,32,0.22)';
+                ctx.fillRect(state.width / 2 - 1, py + 110, 2, 62);
+                // Restart hint
+                ctx.font = '600 14px Poppins, Arial';
+                ctx.fillStyle = 'rgba(245, 200, 66, 0.72)';
+                ctx.fillText('Press R  or  tap to try again', state.width / 2, py + 230);
+            }
+        }
+
+        function draw() {
+            drawBackground();
+            state.pipes.forEach(pipe => {
+                drawPipe(pipe.x, 0, state.pipeWidth, pipe.top, true);
+                drawPipe(pipe.x, pipe.top + state.pipeGap, state.pipeWidth, state.height - state.ground.h - (pipe.top + state.pipeGap), false);
+                drawItem(pipe);
+            });
+            drawBoss();
+            drawGround();
+            drawBird();
+            drawScore();
+            drawPowerups();
+            // Top-right watermark logo during gameplay
+            if (state.started && !state.gameOver) {
+                drawLogo(state.width - 66, 26, 110, 0.42);
+            }
+            drawPanels();
+        }
+
+        const TARGET_FRAME_MS = 1000 / 60;
+        let lastFrameTime = 0;
+
+        function loop(now) {
+            const rawDt = lastFrameTime ? (now - lastFrameTime) / TARGET_FRAME_MS : 1;
+            lastFrameTime = now;
+            const dt = Math.min(Math.max(rawDt, 0.001), 5);
+            update(dt);
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (!state.gameOver) flap();
+            }
+            if (e.key.toLowerCase() === 'r') {
+                ensureAudio();
+                playRestartSound();
+                resetGame();
+            }
+        });
+
+        canvas.addEventListener('pointerdown', () => {
+            ensureAudio();
+            if (state.gameOver) {
+                playRestartSound();
+                resetGame();
+                return;
+            }
+            flap();
+        });
+
+        resetGame();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
