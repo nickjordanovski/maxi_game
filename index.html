@@ -160,8 +160,11 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
 
+        // Do NOT set crossOrigin: without Access-Control-Allow-Origin, Chrome refuses to
+        // use the bitmap on canvas when crossOrigin='anonymous' (naturalWidth stays 0).
         const maxLogo = new Image();
-        maxLogo.crossOrigin = 'anonymous';
+        let maxLogoFailed = false;
+        maxLogo.onerror = () => { maxLogoFailed = true; };
         maxLogo.src = 'https://maximilian.edu.mk/wp-content/uploads/2023/01/logo-web.png';
 
         let audioCtx = null;
@@ -1192,10 +1195,22 @@
         }
 
         function drawLogo(x, y, w, alpha = 1) {
-            if (!maxLogo.complete || !maxLogo.naturalWidth) return;
-            const h = w * (maxLogo.naturalHeight / maxLogo.naturalWidth);
             ctx.save();
             ctx.globalAlpha = alpha;
+            if (maxLogoFailed || !maxLogo.complete || !maxLogo.naturalWidth) {
+                ctx.textAlign = 'center';
+                ctx.font = '800 ' + Math.round(w * 0.18) + 'px Poppins, Arial';
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.fillText('MAXIMILIAN', x + 1, y + 5);
+                ctx.fillStyle = '#f5c842';
+                ctx.fillText('MAXIMILIAN', x, y + 4);
+                ctx.font = '600 ' + Math.round(w * 0.07) + 'px Poppins, Arial';
+                ctx.fillStyle = 'rgba(200,220,255,0.65)';
+                ctx.fillText('International School', x, y + Math.round(w * 0.14));
+                ctx.restore();
+                return;
+            }
+            const h = w * (maxLogo.naturalHeight / maxLogo.naturalWidth);
             ctx.drawImage(maxLogo, x - w / 2, y - h / 2, w, h);
             ctx.restore();
         }
